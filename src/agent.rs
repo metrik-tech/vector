@@ -1,9 +1,9 @@
 use std::path::Path;
 
 use anyhow::Result;
-use async_std::{fs, task};
+use async_std::{fs, stream::StreamExt as _, task};
 use docker_api::{
-    opts::{ContainerCreateOptsBuilder, ContainerRemoveOptsBuilder, PublishPort},
+    opts::{ContainerCreateOptsBuilder, ContainerRemoveOptsBuilder, PublishPort, PullOptsBuilder},
     Container, Docker, Id,
 };
 use once_cell::sync::Lazy;
@@ -36,6 +36,17 @@ impl Agent {
     pub async fn new<T: ToString>(docker_sock: T, image: T) -> Result<Self> {
         let sock = Docker::unix(docker_sock.to_string());
         sock.ping().await?;
+        let local_images = sock.images();
+        let mut pull_stream = local_images.pull(
+            &PullOptsBuilder::default()
+                .image(image.to_string())
+                .tag("latest")
+                .build(),
+        );
+
+        while let Some(pull_res) = pull_stream.next().await {
+            let _chunk = pull_res.map_err(anyhow::Error::from)?;
+        }
 
         Ok(Self {
             sock: sock.clone(),
@@ -74,8 +85,6 @@ impl Agent {
                     "previously abandoned deployment {} found, removing and redeploying",
                     &old_container_id.to_string()
                 );
-                
-                remove_container(self.sock.containers().get(old_container_id)).await?;
             }
 
             // FIXME: remove this clone
@@ -94,8 +103,10 @@ impl Agent {
         match self.old_container.take().ok_or(anyhow::Error::msg(
             "agent needs to be locked before deploying",
         )) {
-            Ok(container) => remove_container(container).await,
-
+            Ok(container) => {
+                fs::remove_file(*LOCKFILE).await?;
+                remove_container(container).await
+            },
             Err(err) => {
                 if LOCKFILE.exists() {
                     return Err(err);
