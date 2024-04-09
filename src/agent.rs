@@ -69,8 +69,13 @@ impl Agent {
                 serde_json::from_str::<AgentLockfile>(&fs::read_to_string(lockfile).await?)?;
 
             if deserialized_lockfile.status == ContainerStatus::Deploying {
-                // TODO: cancel previous deploy first, then deploy freshly 
-                return Err(anyhow::Error::msg("agent is already deploying"));
+                let old_container_id = deserialized_lockfile.container_id.clone();
+                eprintln!(
+                    "previously abandoned deployment {} found, removing and redeploying",
+                    &old_container_id.to_string()
+                );
+                
+                remove_container(self.sock.containers().get(old_container_id)).await?;
             }
 
             // FIXME: remove this clone
@@ -89,19 +94,8 @@ impl Agent {
         match self.old_container.take().ok_or(anyhow::Error::msg(
             "agent needs to be locked before deploying",
         )) {
-            Ok(container) => {
-                container
-                    .remove(
-                        &ContainerRemoveOptsBuilder::default()
-                            .volumes(false)
-                            .force(true)
-                            .link(false)
-                            .build(),
-                    )
-                    .await?;
+            Ok(container) => remove_container(container).await,
 
-                Ok::<_, anyhow::Error>(())
-            }
             Err(err) => {
                 if LOCKFILE.exists() {
                     return Err(err);
@@ -120,6 +114,20 @@ impl Agent {
 
         Ok(())
     }
+}
+
+async fn remove_container(container: Container) -> Result<()> {
+    container
+        .remove(
+            &ContainerRemoveOptsBuilder::default()
+                .volumes(false)
+                .force(true)
+                .link(false)
+                .build(),
+        )
+        .await?;
+
+    Ok(())
 }
 
 async fn generate_lockfile(lockfile: &Path, id: &Id, status: ContainerStatus) -> Result<()> {
