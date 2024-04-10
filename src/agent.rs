@@ -6,6 +6,7 @@ use docker_api::{
     opts::{ContainerCreateOptsBuilder, ContainerRemoveOptsBuilder, PublishPort, PullOptsBuilder},
     Container, Docker, Id,
 };
+use log::{debug, trace, warn};
 use once_cell::sync::Lazy;
 use rand::{distributions::Alphanumeric, Rng as _};
 use serde::{Deserialize, Serialize};
@@ -36,6 +37,11 @@ impl Agent {
     pub async fn new<T: ToString>(docker_sock: T, image: T) -> Result<Self> {
         let sock = Docker::unix(docker_sock.to_string());
         sock.ping().await?;
+
+        debug!("Connected to docker unix socket {}", DOCKER_UNIX_SOCK);
+        debug!("Pulling image {}", image.to_string());
+
+        // TODO: pull from ghcr.io instead of docker hub
         let local_images = sock.images();
         let mut pull_stream = local_images.pull(
             &PullOptsBuilder::default()
@@ -45,26 +51,32 @@ impl Agent {
         );
 
         while let Some(pull_res) = pull_stream.next().await {
-            let _chunk = pull_res.map_err(anyhow::Error::from)?;
+            let chunk = pull_res.map_err(anyhow::Error::from)?;
+            trace!("Pulling chunk: {:?}", chunk);
         }
+
+        let container_name = format!(
+            "{}-{}",
+            image.to_string(),
+            rand::thread_rng()
+                .sample_iter(&Alphanumeric)
+                .take(7)
+                .map(char::from)
+                .collect::<String>()
+        );
+
+        debug!("Creating container {}", container_name);
 
         Ok(Self {
             sock: sock.clone(),
             container: sock
                 .containers()
                 .create(
-                    &ContainerCreateOptsBuilder::new(format!(
-                        "{}-{}",
-                        image.to_string(),
-                        rand::thread_rng()
-                            .sample_iter(&Alphanumeric)
-                            .take(7)
-                            .map(char::from)
-                            .collect::<String>()
-                    ))
-                    .image(image.to_string())
-                    .expose(PublishPort::tcp(8080), 8080)
-                    .build(),
+                    &ContainerCreateOptsBuilder::new(container_name)
+                        .image(image.to_string())
+                        // FIXME: Actually get the ports right
+                        .expose(PublishPort::tcp(8080), 8080)
+                        .build(),
                 )
                 .await?,
 
@@ -75,14 +87,16 @@ impl Agent {
     pub async fn lock(&mut self) -> Result<&Self> {
         let lockfile = *LOCKFILE;
 
+        debug!("Locking {}", lockfile.display());
+
         if lockfile.exists() {
             let deserialized_lockfile =
                 serde_json::from_str::<AgentLockfile>(&fs::read_to_string(lockfile).await?)?;
 
             if deserialized_lockfile.status == ContainerStatus::Deploying {
                 let old_container_id = deserialized_lockfile.container_id.clone();
-                eprintln!(
-                    "previously abandoned deployment {} found, removing and redeploying",
+                warn!(
+                    "Previously abandoned deployment {} found, removing and redeploying",
                     &old_container_id.to_string()
                 );
             }
@@ -101,7 +115,7 @@ impl Agent {
 
     pub async fn deploy(mut self) -> Result<()> {
         match self.old_container.take().ok_or(anyhow::Error::msg(
-            "agent needs to be locked before deploying",
+            "Agent needs to be locked before deploying",
         )) {
             Ok(container) => {
                 fs::remove_file(*LOCKFILE).await?;
@@ -138,10 +152,14 @@ async fn remove_container(container: Container) -> Result<()> {
         )
         .await?;
 
+    debug!("Removed container {}", container.id());
+
     Ok(())
 }
 
 async fn generate_lockfile(lockfile: &Path, id: &Id, status: ContainerStatus) -> Result<()> {
+    debug!("Generating lockfile {}", lockfile.display());
+
     let lockfile_contents = serde_json::to_string(&AgentLockfile {
         container_id: id.clone(),
         status,

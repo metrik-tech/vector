@@ -3,10 +3,13 @@
     clippy::declare_interior_mutable_const
 )]
 
-use std::net::SocketAddr;
+use std::{env, net::SocketAddr, time::SystemTime};
 
 use agent::{Agent, DOCKER_UNIX_SOCK, LOCKFILE};
+use anyhow::Result;
 use async_std::fs;
+use log::info;
+use owo_colors::OwoColorize;
 use serde::Deserialize;
 use tide::{Request, Response, StatusCode};
 
@@ -21,10 +24,42 @@ struct DeployEndpointBody {
 }
 
 #[async_std::main]
-async fn main() {
-    println!("DEPLOY_SECRET={}", DEPLOY_SECRET);
+async fn main() -> Result<()> {
+    fern::Dispatch::new()
+        .format(|out, message, record| {
+            out.finish(format_args!(
+                "{} {} {} {}",
+                humantime::format_rfc3339_seconds(SystemTime::now()).dimmed(),
+                match record.level() {
+                    log::Level::Error => "ERROR".red().to_string(),
+                    log::Level::Warn => "WARN".yellow().to_string(),
+                    log::Level::Info => "INFO".green().to_string(),
+                    log::Level::Debug => "DEBUG".cyan().to_string(),
+                    log::Level::Trace => "TRACE".blue().to_string(),
+                },
+                record.target().bold(),
+                message
+            ))
+        })
+        .level({
+            if cfg!(debug_assertions) {
+                log::LevelFilter::Trace
+            } else {
+                log::LevelFilter::Debug
+            }
+        })
+        .chain(std::io::stdout())
+        .chain(fern::log_file(format!(
+            "/tmp/{}_{}.log",
+            env::var("CARGO_PKG_NAME")?,
+            humantime::format_rfc3339(SystemTime::now())
+        ))?)
+        .apply()?;
+
+    info!("DEPLOY_SECRET={}", DEPLOY_SECRET);
 
     let mut srv = tide::new();
+    srv.with(tide::log::LogMiddleware::new());
 
     srv.at("/deploy").post(|mut req: Request<()>| async move {
         let body =
@@ -65,9 +100,7 @@ async fn main() {
             ))?))
     });
 
-    println!("Listening on port {}", PORT);
+    srv.listen(SocketAddr::from(([127, 0, 0, 1], PORT))).await?;
 
-    srv.listen(SocketAddr::from(([127, 0, 0, 1], PORT)))
-        .await
-        .unwrap();
+    Ok(())
 }
