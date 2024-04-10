@@ -1368,25 +1368,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6c8640c5d730cb13ebd907d8d04b52f55ac9a2eec55b440c8892f40d56c76c1d"
 
 [[package]]
-name = "metrik-docker-agent"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "async-std",
- "docker-api",
- "fern",
- "humantime",
- "log",
- "once_cell",
- "owo-colors",
- "rand 0.8.5",
- "serde",
- "serde_json",
- "tide",
- "uuid",
-]
-
-[[package]]
 name = "mime"
 version = "0.3.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2362,6 +2343,25 @@ dependencies = [
  "sval_json",
  "sval_ref",
  "sval_serde",
+]
+
+[[package]]
+name = "vector"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-std",
+ "docker-api",
+ "fern",
+ "humantime",
+ "log",
+ "once_cell",
+ "owo-colors",
+ "rand 0.8.5",
+ "serde",
+ "serde_json",
+ "tide",
+ "uuid",
 ]
 
 [[package]]
