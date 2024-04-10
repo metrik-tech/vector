@@ -43,7 +43,12 @@ impl Agent {
 
 		// TODO: pull from ghcr.io instead of docker hub
 		let local_images = sock.images();
-		let mut pull_stream = local_images.pull(&PullOptsBuilder::default().image(image.to_string()).tag("latest").build());
+		let mut pull_stream = local_images.pull(
+			&PullOptsBuilder::default()
+				.image(image.to_string())
+				.tag("latest")
+				.build(),
+		);
 
 		while let Some(pull_res) = pull_stream.next().await {
 			let chunk = pull_res.map_err(anyhow::Error::from)?;
@@ -53,7 +58,11 @@ impl Agent {
 		let container_name = format!(
 			"{}-{}",
 			image.to_string(),
-			rand::thread_rng().sample_iter(&Alphanumeric).take(7).map(char::from).collect::<String>()
+			rand::thread_rng()
+				.sample_iter(&Alphanumeric)
+				.take(7)
+				.map(char::from)
+				.collect::<String>()
 		);
 
 		debug!("Creating container {}", container_name);
@@ -81,7 +90,8 @@ impl Agent {
 		debug!("Locking {}", lockfile.display());
 
 		if lockfile.exists() {
-			let deserialized_lockfile = serde_json::from_str::<AgentLockfile>(&fs::read_to_string(lockfile).await?)?;
+			let deserialized_lockfile =
+				serde_json::from_str::<AgentLockfile>(&fs::read_to_string(lockfile).await?)?;
 
 			if deserialized_lockfile.status == ContainerStatus::Deploying {
 				let old_container_id = deserialized_lockfile.container_id.clone();
@@ -92,7 +102,10 @@ impl Agent {
 			}
 
 			// FIXME: remove this clone
-			self.old_container = Some(Container::new(self.sock.clone(), deserialized_lockfile.container_id))
+			self.old_container = Some(Container::new(
+				self.sock.clone(),
+				deserialized_lockfile.container_id,
+			))
 		}
 
 		generate_lockfile(lockfile, self.container.id(), ContainerStatus::Deploying).await?;
@@ -101,11 +114,9 @@ impl Agent {
 	}
 
 	pub async fn deploy(mut self) -> Result<()> {
-		match self
-			.old_container
-			.take()
-			.ok_or(anyhow::Error::msg("Agent needs to be locked before deploying"))
-		{
+		match self.old_container.take().ok_or(anyhow::Error::msg(
+			"Agent needs to be locked before deploying",
+		)) {
 			Ok(container) => {
 				fs::remove_file(*LOCKFILE).await?;
 				remove_container(container).await
@@ -132,7 +143,13 @@ impl Agent {
 
 async fn remove_container(container: Container) -> Result<()> {
 	container
-		.remove(&ContainerRemoveOptsBuilder::default().volumes(false).force(true).link(false).build())
+		.remove(
+			&ContainerRemoveOptsBuilder::default()
+				.volumes(false)
+				.force(true)
+				.link(false)
+				.build(),
+		)
 		.await?;
 
 	debug!("Removed container {}", container.id());

@@ -1,4 +1,7 @@
-#![allow(clippy::borrow_interior_mutable_const, clippy::declare_interior_mutable_const)]
+#![allow(
+	clippy::borrow_interior_mutable_const,
+	clippy::declare_interior_mutable_const
+)]
 
 use std::{env, net::SocketAddr, time::SystemTime};
 
@@ -59,20 +62,28 @@ async fn main() -> Result<()> {
 	srv.with(tide::log::LogMiddleware::new());
 
 	srv.at("/deploy").post(|mut req: Request<()>| async move {
-		let body = req.body_json::<DeployEndpointBody>().await.map_err(|mut err: tide::Error| {
-			err.set_status(StatusCode::BadRequest);
-			err
-		})?;
+		let body =
+			req.body_json::<DeployEndpointBody>()
+				.await
+				.map_err(|mut err: tide::Error| {
+					err.set_status(StatusCode::BadRequest);
+					err
+				})?;
 
 		if body.secret != DEPLOY_SECRET {
-			return Err(tide::Error::new(StatusCode::Unauthorized, anyhow::Error::msg("invalid deploy secret")));
+			return Err(tide::Error::new(
+				StatusCode::Unauthorized,
+				anyhow::Error::msg("invalid deploy secret"),
+			));
 		}
 
 		fn handle_agent_error(err: anyhow::Error) -> tide::Error {
 			tide::Error::new(StatusCode::InternalServerError, err)
 		}
 
-		let mut agent = Agent::new(DOCKER_UNIX_SOCK, "hello-world").await.map_err(handle_agent_error)?;
+		let mut agent = Agent::new(DOCKER_UNIX_SOCK, "hello-world")
+			.await
+			.map_err(handle_agent_error)?;
 		agent.lock().await.map_err(handle_agent_error)?;
 		agent.deploy().await.map_err(handle_agent_error)?;
 
@@ -83,7 +94,10 @@ async fn main() -> Result<()> {
 	srv.at("/status").get(|_| async {
 		Ok(serde_json::json!(fs::read_to_string(*LOCKFILE)
 			.await
-			.map_err(|err| tide::Error::new(StatusCode::InternalServerError, err))?))
+			.map_err(|err| tide::Error::new(
+				StatusCode::InternalServerError,
+				err
+			))?))
 	});
 
 	srv.listen(SocketAddr::from(([127, 0, 0, 1], PORT))).await?;
