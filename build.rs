@@ -4,7 +4,10 @@ use uuid::Uuid;
 fn main() {
     let out_dir = env::var("OUT_DIR").unwrap();
     let secret_path = Path::new(&out_dir).join("secret.uuid");
-    println!("Generating deployment secret to {}...", secret_path.display());
+    println!(
+        "Generating deployment secret to {}...",
+        secret_path.display()
+    );
 
     let mut secret: String;
 

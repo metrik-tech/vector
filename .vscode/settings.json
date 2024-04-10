@@ -1,0 +1,11 @@
+{
+  "rust-analyzer.check.command": "clippy",
+  "editor.formatOnSave": true,
+  "prettier.tabWidth": 2,
+  "[json][markdown][yaml]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "[rust]": {
+    "editor.defaultFormatter": "rust-lang.rust-analyzer"
+  }
+}

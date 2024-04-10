@@ -11,7 +11,7 @@ use rand::{distributions::Alphanumeric, Rng as _};
 use serde::{Deserialize, Serialize};
 
 pub const LOCKFILE: Lazy<&Path> = Lazy::new(|| Path::new("deploy.lock"));
-pub const DOCKER_UNIX_SOCK: &'static str = "/var/run/docker.sock";
+pub const DOCKER_UNIX_SOCK: &str = "/var/run/docker.sock";
 
 #[derive(Serialize, Deserialize, PartialEq)]
 pub enum ContainerStatus {
@@ -106,7 +106,7 @@ impl Agent {
             Ok(container) => {
                 fs::remove_file(*LOCKFILE).await?;
                 remove_container(container).await
-            },
+            }
             Err(err) => {
                 if LOCKFILE.exists() {
                     return Err(err);
@@ -144,7 +144,7 @@ async fn remove_container(container: Container) -> Result<()> {
 async fn generate_lockfile(lockfile: &Path, id: &Id, status: ContainerStatus) -> Result<()> {
     let lockfile_contents = serde_json::to_string(&AgentLockfile {
         container_id: id.clone(),
-        status: status,
+        status,
     })?;
 
     fs::write(lockfile, lockfile_contents).await?;

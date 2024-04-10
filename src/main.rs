@@ -1,3 +1,8 @@
+#![allow(
+    clippy::borrow_interior_mutable_const,
+    clippy::declare_interior_mutable_const
+)]
+
 use std::net::SocketAddr;
 
 use agent::{Agent, DOCKER_UNIX_SOCK, LOCKFILE};
@@ -7,7 +12,7 @@ use tide::{Request, Response, StatusCode};
 
 mod agent;
 
-const DEPLOY_SECRET: &'static str = include_str!(concat!(env!("OUT_DIR"), "/secret.uuid"));
+const DEPLOY_SECRET: &str = include_str!(concat!(env!("OUT_DIR"), "/secret.uuid"));
 const PORT: u16 = 33293;
 
 #[derive(Deserialize)]
