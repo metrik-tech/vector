@@ -1,9 +1,9 @@
 use std::net::SocketAddr;
 
 use agent::{Agent, DOCKER_UNIX_SOCK, LOCKFILE};
+use async_std::fs;
 use serde::Deserialize;
 use tide::{Request, Response, StatusCode};
-use async_std::fs;
 
 mod agent;
 
@@ -37,9 +37,15 @@ async fn main() {
             ));
         }
 
-        let mut agent = Agent::new(DOCKER_UNIX_SOCK, "hello-world").await.unwrap();
-        agent.lock().await.unwrap();
-        agent.deploy().await.unwrap();
+        fn handle_agent_error(err: anyhow::Error) -> tide::Error {
+            tide::Error::new(StatusCode::InternalServerError, err)
+        }
+
+        let mut agent = Agent::new(DOCKER_UNIX_SOCK, "hello-world")
+            .await
+            .map_err(handle_agent_error)?;
+        agent.lock().await.map_err(handle_agent_error)?;
+        agent.deploy().await.map_err(handle_agent_error)?;
 
         let resp = Response::new(StatusCode::Accepted);
         Ok(resp)
